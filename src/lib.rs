@@ -81,6 +81,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
     use crate::OnceMap;
 
     #[test]
@@ -91,6 +93,27 @@ mod tests {
         // initialize the map locations
         STATIC_MAP.get_or_init(&0, || "Hello, ".into());
         STATIC_MAP.get_or_init(&1, || "World!".into());
+
+        // test the locations are valid
+        assert!(STATIC_MAP.get(&0) == Some(&"Hello, ".into()));
+        assert!(STATIC_MAP.get(&1) == Some(&"World!".into()));
+    }
+
+    #[test]
+    fn get_or_init_threaded() {
+        // create map
+        static STATIC_MAP: OnceMap<u8, String> = OnceMap::new();
+
+        // initialize the map location in thread
+        let thread = thread::spawn(|| {
+            STATIC_MAP.get_or_init(&0, || "Hello, ".into());
+        });
+
+        // initialize map location normally
+        STATIC_MAP.get_or_init(&1, || "World!".into());
+
+        // join the thread
+        thread.join().unwrap();
 
         // test the locations are valid
         assert!(STATIC_MAP.get(&0) == Some(&"Hello, ".into()));
