@@ -58,8 +58,10 @@ where
         // First try only reading from the map. This will only lock if there is a write currently happening.
         // This means that accesses should be fairly fast, because the map will only be locked to read when there is already a write happening.
         // If the cache data is there, a reference to it will be returned.
-        // The reference is transmuted to change the lifetime to be associated with the SyncCache, not the lock guard.
-        // This is SAFE because the data in the Arc, once in the hashmap, will never be modified or destroyed, and will live as long as the SyncCache.
+        // The reference is created by extracting the pointer inside the Arc.
+        // The validity of this is documented here: https://doc.rust-lang.org/std/sync/struct.Arc.html#method.as_ptr
+        // > The docs say, "The pointer is valid for as long as there are strong counts in the Arc."
+        // This is SAFE because the data in the Arc, once in the hashmap, will never be modified or destroyed, and will live as long as the OnceMap.
         let map = cache.read().unwrap();
         match map.get(key) {
             Some(item) => return unsafe { &*Arc::<V>::as_ptr(item) },
@@ -69,10 +71,10 @@ where
         // drop the map so we can lock it as write after this
         drop(map);
 
-        // If the shader has not been uploaded before, we need get a write lock and create the new entry for the shader.
+        // If the data has not been uploaded before, we need get a write lock and create the new entry for the data.
         let mut map = cache.write().unwrap();
         return match map.entry(key.clone()) {
-            // if somehow the shader has been compiled between locks, well great! We will return it now.
+            // if somehow the data has been cached between locks, well great! We will return it now.
             Entry::Occupied(e) => unsafe { &*Arc::<V>::as_ptr(e.into_mut()) },
             Entry::Vacant(e) => unsafe { &*Arc::<V>::as_ptr(e.insert(Arc::new(f()))) },
         };
