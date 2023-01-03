@@ -45,6 +45,41 @@ where
         Some(unsafe { &*Arc::<V>::as_ptr(item) })
     }
 
+    /// Initializes data associated with `key` using `f`.
+    ///
+    /// Returns `false` if the data has already been initialized.
+    pub fn init<F>(&self, key: &K, f: F) -> bool
+    where
+        F: FnOnce() -> V,
+    {
+        // if the map isnt even created, return false
+        let Some(cache) = self.cache.get() else {
+            return false;
+        };
+
+        // check if the item exists. If it does, do not initialize and return false.
+        let map = cache.read().unwrap();
+        match map.get(key) {
+            Some(_) => return false,
+            _ => (),
+        }
+
+        // drop the map so we can lock it as write after this
+        drop(map);
+
+        // since there is no item in the map, initialize it.
+        let mut map = cache.write().unwrap();
+        return match map.entry(key.clone()) {
+            // if somehow the data has been cached between locks, return false.
+            Entry::Occupied(_) => false,
+            // otherwise proceed with initializing the data
+            Entry::Vacant(e) => {
+                e.insert(Arc::new(f()));
+                true
+            }
+        };
+    }
+
     /// Gets the contents of the entry associated with `key`,
     /// initializing it with `f` if the cell was empty.
     pub fn get_or_init<F>(&self, key: &K, f: F) -> &V
