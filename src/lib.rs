@@ -9,6 +9,11 @@ use hashbrown::{
 };
 use once_cell::sync::OnceCell;
 
+pub enum GetOrInitData<T> {
+    Init(T),
+    Get(T),
+}
+
 /// A map of cells that can be written to only once.
 #[derive(Clone)]
 pub struct OnceMap<K, V, S = DefaultHashBuilder> {
@@ -82,7 +87,7 @@ where
 
     /// Gets the contents of the entry associated with `key`,
     /// initializing it with `f` if the cell was empty.
-    pub fn get_or_init<F>(&self, key: &K, f: F) -> &V
+    pub fn get_or_init<F>(&self, key: &K, f: F) -> GetOrInitData<&V>
     where
         F: FnOnce() -> V,
     {
@@ -99,7 +104,7 @@ where
         // This is SAFE because the data in the Arc, once in the hashmap, will never be modified or destroyed, and will live as long as the OnceMap.
         let map = cache.read().unwrap();
         match map.get(key) {
-            Some(item) => return unsafe { &*Arc::<V>::as_ptr(item) },
+            Some(item) => return GetOrInitData::Get(unsafe { &*Arc::<V>::as_ptr(item) }),
             _ => (),
         }
 
@@ -110,8 +115,10 @@ where
         let mut map = cache.write().unwrap();
         return match map.entry(key.clone()) {
             // if somehow the data has been cached between locks, well great! We will return it now.
-            Entry::Occupied(e) => unsafe { &*Arc::<V>::as_ptr(e.into_mut()) },
-            Entry::Vacant(e) => unsafe { &*Arc::<V>::as_ptr(e.insert(Arc::new(f()))) },
+            Entry::Occupied(e) => GetOrInitData::Get(unsafe { &*Arc::<V>::as_ptr(e.into_mut()) }),
+            Entry::Vacant(e) => {
+                GetOrInitData::Init(unsafe { &*Arc::<V>::as_ptr(e.insert(Arc::new(f()))) })
+            }
         };
     }
 }
