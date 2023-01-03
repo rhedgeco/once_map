@@ -8,10 +8,18 @@ use hashbrown::{
     HashMap,
 };
 use once_cell::sync::OnceCell;
-
 pub enum GetOrInitData<T> {
     Init(T),
     Get(T),
+}
+
+impl<T> GetOrInitData<T> {
+    pub fn into_data(self) -> T {
+        match self {
+            GetOrInitData::Get(data) => data,
+            GetOrInitData::Init(data) => data,
+        }
+    }
 }
 
 /// A map of cells that can be written to only once.
