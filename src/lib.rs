@@ -23,9 +23,16 @@ impl<T> GetOrInitData<T> {
 }
 
 /// A map of cells that can be written to only once.
-#[derive(Clone)]
 pub struct OnceMap<K, V, S = DefaultHashBuilder> {
     cache: OnceCell<Arc<RwLock<HashMap<K, Arc<V>, S>>>>,
+}
+
+impl<K, V> Clone for OnceMap<K, V> {
+    fn clone(&self) -> Self {
+        Self {
+            cache: self.cache.clone(),
+        }
+    }
 }
 
 impl<K, V> Default for OnceMap<K, V>
