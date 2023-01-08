@@ -37,7 +37,7 @@ impl<K, V> Clone for OnceMap<K, V> {
 
 impl<K, V> Default for OnceMap<K, V>
 where
-    K: Eq + Hash + Clone,
+    K: Eq + Hash,
 {
     fn default() -> Self {
         Self::new()
@@ -46,7 +46,7 @@ where
 
 impl<K, V> OnceMap<K, V>
 where
-    K: Eq + Hash + Clone,
+    K: Eq + Hash,
 {
     /// Creates a new empty OnceMap.
     pub const fn new() -> Self {
@@ -68,7 +68,7 @@ where
     /// Initializes data associated with `key` using `f`.
     ///
     /// Returns `false` if the data has already been initialized.
-    pub fn init<F>(&self, key: &K, f: F) -> bool
+    pub fn init<F>(&self, key: K, f: F) -> bool
     where
         F: FnOnce() -> V,
     {
@@ -79,7 +79,7 @@ where
 
         // check if the item exists. If it does, do not initialize and return false.
         let map = cache.read().unwrap();
-        match map.get(key) {
+        match map.get(&key) {
             Some(_) => return false,
             _ => (),
         }
@@ -89,7 +89,7 @@ where
 
         // since there is no item in the map, initialize it.
         let mut map = cache.write().unwrap();
-        return match map.entry(key.clone()) {
+        return match map.entry(key) {
             // if somehow the data has been cached between locks, return false.
             Entry::Occupied(_) => false,
             // otherwise proceed with initializing the data
@@ -102,7 +102,7 @@ where
 
     /// Gets the contents of the entry associated with `key`,
     /// initializing it with `f` if the cell was empty.
-    pub fn get_or_init<F>(&self, key: &K, f: F) -> GetOrInitData<&V>
+    pub fn get_or_init<F>(&self, key: K, f: F) -> GetOrInitData<&V>
     where
         F: FnOnce() -> V,
     {
@@ -118,7 +118,7 @@ where
         // > The docs say, "The pointer is valid for as long as there are strong counts in the Arc."
         // This is SAFE because the data in the Arc, once in the hashmap, will never be modified or destroyed, and will live as long as the OnceMap.
         let map = cache.read().unwrap();
-        match map.get(key) {
+        match map.get(&key) {
             Some(item) => return GetOrInitData::Get(unsafe { &*Arc::<V>::as_ptr(item) }),
             _ => (),
         }
@@ -128,7 +128,7 @@ where
 
         // If the data has not been uploaded before, we need get a write lock and create the new entry for the data.
         let mut map = cache.write().unwrap();
-        return match map.entry(key.clone()) {
+        return match map.entry(key) {
             // if somehow the data has been cached between locks, well great! We will return it now.
             Entry::Occupied(e) => GetOrInitData::Get(unsafe { &*Arc::<V>::as_ptr(e.into_mut()) }),
             Entry::Vacant(e) => {
@@ -150,8 +150,8 @@ mod tests {
         static STATIC_MAP: OnceMap<u8, String> = OnceMap::new();
 
         // initialize the map locations
-        STATIC_MAP.get_or_init(&0, || "Hello, ".into());
-        STATIC_MAP.get_or_init(&1, || "World!".into());
+        STATIC_MAP.get_or_init(0, || "Hello, ".into());
+        STATIC_MAP.get_or_init(1, || "World!".into());
 
         // test the locations are valid
         assert!(STATIC_MAP.get(&0) == Some(&"Hello, ".into()));
@@ -165,11 +165,11 @@ mod tests {
 
         // initialize the map location in thread
         let thread = thread::spawn(|| {
-            STATIC_MAP.get_or_init(&0, || "Hello, ".into());
+            STATIC_MAP.get_or_init(0, || "Hello, ".into());
         });
 
         // initialize map location normally
-        STATIC_MAP.get_or_init(&1, || "World!".into());
+        STATIC_MAP.get_or_init(1, || "World!".into());
 
         // join the thread
         thread.join().unwrap();
